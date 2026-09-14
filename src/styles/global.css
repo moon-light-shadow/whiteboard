@@ -1,0 +1,158 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --wb-surface-base: #f8fafc;
+    --wb-surface-panel: rgba(255, 255, 255, 0.78);
+    --wb-surface-raised: #ffffff;
+    --wb-surface-sunken: #eef2f7;
+    --wb-surface-border: rgba(15, 23, 42, 0.09);
+    --wb-surface-hover: rgba(15, 23, 42, 0.05);
+    --wb-text-primary: #0f172a;
+    --wb-text-secondary: #475569;
+    --wb-text-muted: #94a3b8;
+    --wb-text-inverse: #ffffff;
+    --wb-shadow-panel: 0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 26px -14px rgba(15, 23, 42, 0.2);
+    --wb-shadow-float: 0 2px 6px rgba(15, 23, 42, 0.06), 0 20px 44px -20px rgba(15, 23, 42, 0.3);
+    --wb-shadow-pop: 0 12px 34px -10px rgba(15, 23, 42, 0.26), 0 2px 8px rgba(15, 23, 42, 0.08);
+    --wb-canvas-bg: #fdfdfe;
+    --wb-dot: rgba(100, 116, 139, 0.3);
+    --wb-grid-strong: rgba(100, 116, 139, 0.14);
+    --wb-selection: #4f46e5;
+    --wb-selection-soft: rgba(99, 102, 241, 0.14);
+    --wb-guide: #0ea5e9;
+    --wb-note-shadow: 0 8px 18px -10px rgba(15, 23, 42, 0.4);
+  }
+
+  .dark {
+    --wb-surface-base: #0b1220;
+    --wb-surface-panel: rgba(17, 24, 39, 0.72);
+    --wb-surface-raised: #151d2e;
+    --wb-surface-sunken: #0f172a;
+    --wb-surface-border: rgba(226, 232, 240, 0.1);
+    --wb-surface-hover: rgba(226, 232, 240, 0.07);
+    --wb-text-primary: #e2e8f0;
+    --wb-text-secondary: #94a3b8;
+    --wb-text-muted: #64748b;
+    --wb-text-inverse: #0b1220;
+    --wb-shadow-panel: 0 1px 2px rgba(0, 0, 0, 0.4), 0 14px 30px -18px rgba(0, 0, 0, 0.7);
+    --wb-shadow-float: 0 2px 8px rgba(0, 0, 0, 0.45), 0 24px 48px -24px rgba(0, 0, 0, 0.8);
+    --wb-shadow-pop: 0 14px 38px -12px rgba(0, 0, 0, 0.7), 0 2px 10px rgba(0, 0, 0, 0.4);
+    --wb-canvas-bg: #0b1220;
+    --wb-dot: rgba(148, 163, 184, 0.22);
+    --wb-grid-strong: rgba(148, 163, 184, 0.1);
+    --wb-selection: #818cf8;
+    --wb-selection-soft: rgba(129, 140, 248, 0.18);
+    --wb-guide: #38bdf8;
+    --wb-note-shadow: 0 10px 22px -12px rgba(0, 0, 0, 0.75);
+  }
+
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-surface-base text-content-primary font-sans antialiased;
+    font-size: 13px;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  button {
+    font: inherit;
+    color: inherit;
+  }
+
+  input,
+  textarea {
+    font: inherit;
+  }
+
+  ::selection {
+    background: var(--wb-selection-soft);
+  }
+}
+
+@layer components {
+  .wb-glass {
+    background: var(--wb-surface-panel);
+    backdrop-filter: saturate(180%) blur(18px);
+    -webkit-backdrop-filter: saturate(180%) blur(18px);
+    border: 1px solid var(--wb-surface-border);
+    box-shadow: var(--wb-shadow-panel);
+  }
+
+  .wb-panel {
+    background: var(--wb-surface-raised);
+    border: 1px solid var(--wb-surface-border);
+    box-shadow: var(--wb-shadow-pop);
+  }
+
+  .wb-focus {
+    @apply outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50 focus-visible:ring-offset-0;
+  }
+
+  /* 原生 range 滑块：仅保留自绘轨道，拇指为品牌色圆点 */
+  .wb-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 999px;
+    background: #ffffff;
+    border: 2px solid var(--wb-selection);
+    box-shadow: 0 2px 6px -2px rgba(15, 23, 42, 0.5);
+    cursor: pointer;
+    transition: transform 140ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .wb-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.12);
+  }
+
+  .wb-slider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 999px;
+    background: #ffffff;
+    border: 2px solid var(--wb-selection);
+    cursor: pointer;
+  }
+
+  .wb-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: var(--wb-text-muted) transparent;
+  }
+
+  .wb-scroll::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .wb-scroll::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--wb-text-muted) 45%, transparent);
+    border-radius: 999px;
+  }
+
+  .wb-scroll::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in srgb, var(--wb-text-muted) 70%, transparent);
+  }
+
+  .wb-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@layer utilities {
+  .wb-canvas-cursor {
+    cursor: var(--wb-cursor, default);
+  }
+}
