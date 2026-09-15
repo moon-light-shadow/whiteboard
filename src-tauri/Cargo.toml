@@ -1,6 +1,6 @@
 [package]
 name = "whiteboard"
-version = "0.1.0"
+version = "0.2.0"
 description = "Whiteboard - 桌面无限画布白板"
 authors = ["Whiteboard"]
 edition = "2021"

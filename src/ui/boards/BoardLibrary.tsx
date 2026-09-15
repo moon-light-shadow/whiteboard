@@ -1,8 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Copy, FileUp, HardDrive, Loader2, Moon, Pencil, Plus, Search, Sun, Trash2 } from 'lucide-react'
 import type { BoardMeta } from '../../kernel/types'
-import { getRepository, uniqueName, type BoardDocument } from '../../persist'
+import {
+  getRepository,
+  loadStorageInfo,
+  supportsStorageLocation,
+  uniqueName,
+  type BoardDocument,
+  type StorageInfo,
+} from '../../persist'
 import { useUiStore } from '../../store/ui-store'
+import { StorageDialog } from '../dialogs/StorageDialog'
 import { cn } from '../primitives/cn'
 import { Button, IconButton } from '../primitives/Button'
 import { Dialog } from '../primitives/Dialog'
@@ -44,6 +52,9 @@ export function BoardLibrary({ onOpen }: BoardLibraryProps) {
   const [renaming, setRenaming] = useState<BoardMeta | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [removing, setRemoving] = useState<BoardMeta | null>(null)
+  const [storageOpen, setStorageOpen] = useState(false)
+  const [storageFirstRun, setStorageFirstRun] = useState(false)
+  const [storageInfo, setStorageInfo] = useState<StorageInfo | null>(null)
 
   const refresh = useCallback(async () => {
     try {
@@ -59,6 +70,29 @@ export function BoardLibrary({ onOpen }: BoardLibraryProps) {
   useEffect(() => {
     void refresh()
   }, [refresh])
+
+  /** 桌面端读取画布目录；首次启动（尚未选择过）时弹出引导 */
+  useEffect(() => {
+    if (!supportsStorageLocation()) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const info = await loadStorageInfo()
+        if (cancelled || !info) return
+        setStorageInfo(info)
+        if (!info.configured) {
+          setStorageFirstRun(true)
+          setStorageOpen(true)
+        }
+      } catch (error) {
+        console.error('读取存储位置失败', error)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+    // 仅需在进入白板库时读取一次，与列表刷新无关
+  }, [])
 
   const names = useMemo(() => metas.map((meta) => meta.name), [metas])
   const keyword = query.trim().toLowerCase()
@@ -177,8 +211,15 @@ export function BoardLibrary({ onOpen }: BoardLibraryProps) {
               </span>
               <h1 className="text-[19px] font-semibold tracking-tight text-content-primary">白板库</h1>
             </div>
-            <p className="mt-2 text-[12.5px] text-content-secondary">
-              无限画布 · 本地优先存储 · 数据保存在{repository.label}
+            <p className="mt-2 flex flex-wrap items-center gap-x-1.5 text-[12.5px] text-content-secondary">
+              无限画布 · 本地优先存储 · 数据保存在
+              {storageInfo ? (
+                <span className="max-w-[440px] truncate font-mono text-[11.5px] text-content-primary" title={storageInfo.dataDir}>
+                  {storageInfo.dataDir}
+                </span>
+              ) : (
+                <span>{repository.label}</span>
+              )}
             </p>
           </div>
 
@@ -197,6 +238,19 @@ export function BoardLibrary({ onOpen }: BoardLibraryProps) {
                 {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
               </IconButton>
             </Tooltip>
+            {supportsStorageLocation() ? (
+              <Tooltip label="更改画布存放位置" side="bottom">
+                <IconButton
+                  label="画布存放位置"
+                  onClick={() => {
+                    setStorageFirstRun(false)
+                    setStorageOpen(true)
+                  }}
+                >
+                  <HardDrive size={16} />
+                </IconButton>
+              </Tooltip>
+            ) : null}
             <Button variant="secondary" size="lg" onClick={importScene} disabled={busy !== null}>
               {busy === IMPORT_KEY ? <Loader2 size={15} className="animate-spin" /> : <FileUp size={15} />}
               导入场景
@@ -399,6 +453,19 @@ export function BoardLibrary({ onOpen }: BoardLibraryProps) {
           即将删除「<span className="font-semibold text-content-primary">{removing?.name}</span>」。
         </p>
       </Dialog>
+
+      <StorageDialog
+        open={storageOpen}
+        firstRun={storageFirstRun}
+        onClose={() => {
+          setStorageOpen(false)
+          setStorageFirstRun(false)
+        }}
+        onChanged={(info) => {
+          setStorageInfo(info)
+          void refresh()
+        }}
+      />
     </div>
   )
 }

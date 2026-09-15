@@ -3,10 +3,19 @@ use std::path::Path;
 
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine as _;
+use serde::Serialize;
 use tauri::State;
 
 use crate::error::{AppError, AppResult};
-use crate::storage::{BoardMeta, RawAsset, Storage};
+use crate::storage::{BoardMeta, MigrationReport, RawAsset, Storage, StorageInfo};
+
+/// 切换目录后的返回：新位置快照 + 迁移统计（未迁移时为 null）
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetStorageDirResult {
+    pub info: StorageInfo,
+    pub migration: Option<MigrationReport>,
+}
 
 // ---------------------------------------------------------------- 白板文档
 
@@ -52,6 +61,35 @@ pub fn write_asset(
 #[tauri::command]
 pub fn read_asset(storage: State<'_, Storage>, id: String, asset_id: String) -> AppResult<Option<RawAsset>> {
     storage.read_asset(&id, &asset_id)
+}
+
+// ---------------------------------------------------------------- 存储位置
+
+#[tauri::command]
+pub fn storage_info(storage: State<'_, Storage>) -> AppResult<StorageInfo> {
+    storage.info()
+}
+
+/// 切换画布目录；`migrate` 为真时把现有白板一并复制到新目录
+#[tauri::command]
+pub fn set_storage_dir(
+    storage: State<'_, Storage>,
+    path: String,
+    migrate: bool,
+) -> AppResult<SetStorageDirResult> {
+    let (info, migration) = storage.set_data_dir(&path, migrate)?;
+    Ok(SetStorageDirResult { info, migration })
+}
+
+#[tauri::command]
+pub fn reset_storage_dir(storage: State<'_, Storage>) -> AppResult<StorageInfo> {
+    storage.reset_data_dir()
+}
+
+/// 用系统文件管理器打开画布目录，便于用户手动备份或迁移
+#[tauri::command]
+pub fn open_storage_dir(storage: State<'_, Storage>) -> AppResult<()> {
+    crate::storage::reveal_dir(&storage.data_dir())
 }
 
 // -------------------------------------------------- 系统文件读写（配合对话框）

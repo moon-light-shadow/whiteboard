@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::RwLock;
 
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine as _;
@@ -14,6 +15,7 @@ const BOARD_FILE: &str = "board.json";
 const META_FILE: &str = "meta.json";
 const BOARD_BACKUP: &str = "board.json.bak";
 const TEMP_EXT: &str = "tmp";
+const CONFIG_FILE: &str = "storage.json";
 
 /// 白板列表项（与前端 `BoardMeta` 对齐，`storage` 由前端补齐）
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -36,26 +38,184 @@ pub struct RawAsset {
     pub mime: String,
 }
 
-/// 本地存储：`<appData>/boards/<id>/{board.json, meta.json, assets/}`
-///
-/// 约定：
-/// - 写入先落临时文件再改名，避免半截文件；
-/// - 覆盖前备份上一份 `board.json.bak`，读取时自动回退并自愈；
-/// - 目录名即权威 ID，`meta.json` 损坏时可由 `board.json` 重建。
-#[derive(Debug, Clone)]
+/// 画布存储位置快照，供前端展示
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StorageInfo {
+    /// 当前画布数据目录（各白板位于其 `boards` 子目录）
+    pub data_dir: String,
+    /// 出厂默认目录，用于「恢复默认位置」
+    pub default_dir: String,
+    /// 用户是否显式选择过目录（false = 首次启动尚未选择）
+    pub configured: bool,
+    /// 当前目录下的白板数量
+    pub board_count: usize,
+}
+
+/// 目录迁移结果
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MigrationReport {
+    pub copied: usize,
+    pub skipped: usize,
+    pub failed: usize,
+}
+
+/// 落盘的存储配置：只记录用户选定的目录，文件位置固定不变
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StorageConfig {
+    data_dir: Option<String>,
+}
+
+/// 存储位置的权威配置文件名固定，目录为应用数据根目录
+#[derive(Debug)]
 pub struct Storage {
-    root: PathBuf,
+    /// 用户选定的画布数据根目录（`boards/` 存放在其中）
+    data_dir: RwLock<PathBuf>,
+    /// 出厂默认位置，永远可回退
+    default_dir: PathBuf,
+    /// 配置文件路径（位于应用配置目录，与画布数据分离）
+    config_path: PathBuf,
+    /// 是否已显式配置过目录
+    configured: RwLock<bool>,
 }
 
 impl Storage {
+    /// 读取配置并初始化；配置缺失/损坏/目录不可用时回退到默认位置，保证应用总能启动
     pub fn init<R: Runtime>(app: &AppHandle<R>) -> AppResult<Self> {
-        let root = app.path().app_data_dir()?;
-        fs::create_dir_all(root.join(BOARDS_DIR))?;
-        Ok(Self { root })
+        let default_dir = app.path().app_data_dir()?;
+        let config_path = app
+            .path()
+            .app_config_dir()
+            .unwrap_or_else(|_| default_dir.clone())
+            .join(CONFIG_FILE);
+
+        let mut configured = false;
+        let mut data_dir = default_dir.clone();
+
+        if let Ok(text) = fs::read_to_string(&config_path) {
+            if let Ok(config) = serde_json::from_str::<StorageConfig>(&text) {
+                let raw = config.data_dir.unwrap_or_default();
+                let raw = raw.trim();
+                if !raw.is_empty() && Path::new(raw).is_absolute() {
+                    data_dir = PathBuf::from(raw);
+                    configured = true;
+                }
+            }
+        }
+
+        if let Err(error) = fs::create_dir_all(data_dir.join(BOARDS_DIR)) {
+            eprintln!(
+                "画布目录不可用（{}）：{error}，已回退到默认位置",
+                data_dir.display()
+            );
+            data_dir = default_dir.clone();
+            configured = false;
+            fs::create_dir_all(data_dir.join(BOARDS_DIR))?;
+        }
+
+        Ok(Self {
+            data_dir: RwLock::new(data_dir),
+            default_dir,
+            config_path,
+            configured: RwLock::new(configured),
+        })
+    }
+
+    // ------------------------------------------------------------ 存储位置
+
+    /// 当前画布数据目录
+    pub fn data_dir(&self) -> PathBuf {
+        self.current_dir()
+    }
+
+    pub fn info(&self) -> AppResult<StorageInfo> {
+        Ok(StorageInfo {
+            data_dir: display_path(&self.current_dir()),
+            default_dir: display_path(&self.default_dir),
+            configured: self.is_configured(),
+            board_count: self.list_boards()?.len(),
+        })
+    }
+
+    /// 切换到新目录；`migrate` 为真时把现有白板复制过去（同名目录跳过，不覆盖已有数据）
+    pub fn set_data_dir(&self, raw: &str, migrate: bool) -> AppResult<(StorageInfo, Option<MigrationReport>)> {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            return Err(AppError::new("请选择一个存放画布的目录"));
+        }
+        let target = PathBuf::from(trimmed);
+        if !target.is_absolute() {
+            return Err(AppError::new(format!("需要绝对路径：{trimmed}")));
+        }
+
+        let boards = target.join(BOARDS_DIR);
+        fs::create_dir_all(&boards)
+            .map_err(|error| AppError::new(format!("无法创建目录（{}）：{error}", target.display())))?;
+        probe_writable(&boards)?;
+
+        let current = self.current_dir();
+        let report = if migrate && !same_path(&current, &target) {
+            Some(migrate_boards(&current.join(BOARDS_DIR), &boards)?)
+        } else {
+            None
+        };
+
+        self.switch_to(&target)?;
+        Ok((self.info()?, report))
+    }
+
+    /// 恢复出厂默认位置（同样写回配置，避免下次启动再弹引导）
+    pub fn reset_data_dir(&self) -> AppResult<StorageInfo> {
+        let default_dir = self.default_dir.clone();
+        fs::create_dir_all(default_dir.join(BOARDS_DIR))?;
+        self.switch_to(&default_dir)?;
+        Ok(self.info()?)
+    }
+
+    /// 先落配置再改内存：配置写失败时不切换，避免下次启动位置不一致
+    fn switch_to(&self, target: &Path) -> AppResult<()> {
+        fs::create_dir_all(target.join(BOARDS_DIR))?;
+        self.persist_config(target)?;
+        match self.data_dir.write() {
+            Ok(mut guard) => *guard = target.to_path_buf(),
+            Err(poisoned) => *poisoned.into_inner() = target.to_path_buf(),
+        }
+        match self.configured.write() {
+            Ok(mut guard) => *guard = true,
+            Err(poisoned) => *poisoned.into_inner() = true,
+        }
+        Ok(())
+    }
+
+    fn persist_config(&self, dir: &Path) -> AppResult<()> {
+        if let Some(parent) = self.config_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let config = StorageConfig {
+            data_dir: Some(display_path(dir)),
+        };
+        let text = serde_json::to_string_pretty(&config)?;
+        write_atomic(&self.config_path, text.as_bytes())
+    }
+
+    fn current_dir(&self) -> PathBuf {
+        match self.data_dir.read() {
+            Ok(guard) => guard.clone(),
+            Err(poisoned) => poisoned.into_inner().clone(),
+        }
+    }
+
+    fn is_configured(&self) -> bool {
+        match self.configured.read() {
+            Ok(guard) => *guard,
+            Err(poisoned) => *poisoned.into_inner(),
+        }
     }
 
     fn boards_root(&self) -> PathBuf {
-        self.root.join(BOARDS_DIR)
+        self.current_dir().join(BOARDS_DIR)
     }
 
     fn board_dir(&self, id: &str) -> AppResult<PathBuf> {
@@ -282,6 +442,109 @@ fn asset_paths(assets: &Path, asset_id: &str) -> AppResult<Vec<PathBuf>> {
     }
     paths.sort();
     Ok(paths)
+}
+
+/// 真写一个探针文件，确认目标目录确实可写（而非仅有权限位）
+fn probe_writable(boards: &Path) -> AppResult<()> {
+    let probe = boards.join(format!(".whiteboard-write-test.{TEMP_EXT}"));
+    fs::write(&probe, b"ok")
+        .map_err(|error| AppError::new(format!("目录不可写（{}）：{error}", boards.display())))?;
+    let _ = fs::remove_file(&probe);
+    Ok(())
+}
+
+/// 把源 `boards` 下的白板复制到目标目录，同名目录跳过，绝不覆盖既有数据
+fn migrate_boards(source: &Path, target: &Path) -> AppResult<MigrationReport> {
+    let mut report = MigrationReport {
+        copied: 0,
+        skipped: 0,
+        failed: 0,
+    };
+    if !source.is_dir() {
+        return Ok(report);
+    }
+    fs::create_dir_all(target)?;
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        if !entry.file_type()?.is_dir() {
+            continue;
+        }
+        let dest = target.join(entry.file_name());
+        if dest.exists() {
+            report.skipped += 1;
+            continue;
+        }
+        match copy_dir(&entry.path(), &dest) {
+            Ok(()) => report.copied += 1,
+            Err(error) => {
+                eprintln!("复制白板失败（{}）：{error}", entry.path().display());
+                let _ = fs::remove_dir_all(&dest);
+                report.failed += 1;
+            }
+        }
+    }
+    Ok(report)
+}
+
+fn copy_dir(source: &Path, target: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(target)?;
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        let dest = target.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_dir(&entry.path(), &dest)?;
+        } else {
+            fs::copy(entry.path(), dest)?;
+        }
+    }
+    Ok(())
+}
+
+/// Windows 路径大小写与分隔符不敏感，比较前先归一化
+fn same_path(a: &Path, b: &Path) -> bool {
+    let norm = |path: &Path| {
+        path.to_string_lossy()
+            .replace('/', "\\")
+            .trim_end_matches('\\')
+            .to_lowercase()
+    };
+    norm(a) == norm(b)
+}
+
+/// 展示用路径：去掉 Windows 扩展长度前缀，便于直接粘贴到资源管理器
+fn display_path(path: &Path) -> String {
+    let text = path.to_string_lossy().to_string();
+    text.strip_prefix(r"\\?\").unwrap_or(&text).to_string()
+}
+
+/// 用系统文件管理器打开目录，方便用户查看/备份画布
+pub fn reveal_dir(path: &Path) -> AppResult<()> {
+    if !path.exists() {
+        return Err(AppError::new(format!("目录不存在：{}", path.display())));
+    }
+    #[cfg(target_os = "windows")]
+    let mut command = {
+        let mut cmd = std::process::Command::new("explorer");
+        cmd.arg(path);
+        cmd
+    };
+    #[cfg(target_os = "macos")]
+    let mut command = {
+        let mut cmd = std::process::Command::new("open");
+        cmd.arg(path);
+        cmd
+    };
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let mut command = {
+        let mut cmd = std::process::Command::new("xdg-open");
+        cmd.arg(path);
+        cmd
+    };
+
+    command
+        .spawn()
+        .map_err(|error| AppError::new(format!("打开目录失败：{error}")))?;
+    Ok(())
 }
 
 fn ext_for_mime(mime: &str) -> &'static str {

@@ -1,7 +1,7 @@
 {
   "name": "whiteboard",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "Whiteboard - 一款启动迅速、书写流畅的桌面无限画布白板应用（Microsoft Whiteboard 替代品）",
   "scripts": {

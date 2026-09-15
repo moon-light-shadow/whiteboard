@@ -30,7 +30,7 @@ function newId(): string {
  */
 export class TauriBoardRepository implements BoardRepository {
   readonly kind = 'tauri' as const
-  readonly label = '本机应用数据目录'
+  readonly label = '本机目录'
 
   async list(): Promise<BoardMeta[]> {
     const metas = await invoke<BoardMeta[]>('list_boards')
