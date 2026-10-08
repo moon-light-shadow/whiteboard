@@ -166,7 +166,7 @@ export function StorageDialog({ open, onClose, firstRun = false, onChanged }: St
       }
     >
       {!supportsStorageLocation() ? (
-        <p className="text-[12.5px] text-content-secondary">浏览器预览模式使用内置存储，无自定义目录。</p>
+        <p className="text-[12.5px] text-content-secondary">当前环境使用应用内置存储，暂不支持自定义目录。</p>
       ) : loading && !info ? (
         <div className="flex items-center justify-center gap-2 py-14 text-[12.5px] text-content-muted">
           <Loader2 size={15} className="animate-spin" />

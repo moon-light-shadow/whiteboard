@@ -8,10 +8,13 @@
 
 | 文件 | 大小 | 适用场景 |
 |---|---|---|
-| `Whiteboard_x64-setup.exe` | ~1.4 MB | 推荐，双击安装 |
-| `Whiteboard_x64_en-US.msi` | ~1.9 MB | 企业静默部署（`msiexec /i`） |
+| `Whiteboard_x64-setup.exe` | ~1.4 MB | Windows 推荐，双击安装 |
+| `Whiteboard_x64_en-US.msi` | ~1.9 MB | Windows 企业静默部署（`msiexec /i`） |
+| `Whiteboard_0.2.0_android-universal.apk` | ~3.8 MB | Android 手机 / 平板，直接安装 |
 
 系统要求：Windows 10 1809+ / Windows 11（x64）。首次安装若系统缺少 WebView2 Runtime 会自动联网获取。
+
+Android 端要求 Android 7.0（API 24）及以上，安装包为通用 APK（`arm64-v8a` / `armeabi-v7a` / `x86` / `x86_64`）。移动端画布数据保存在应用私有目录，不提供自定义存放位置。
 
 ## 特性
 
@@ -43,11 +46,24 @@ npm run tauri:dev  # 启动开发模式（热更新）
 
 ## 构建
 
+Windows：
+
 ```bash
 npm run tauri:build
 ```
 
 产物位于 `src-tauri/target/release/bundle/`（NSIS 安装包 + MSI）。
+
+Android：
+
+```bash
+npm run tauri android init            # 首次生成 gen/android 工程（已随仓库提交）
+npm run tauri android build -- --apk  # 生成通用 APK
+```
+
+产物位于 `src-tauri/gen/android/app/build/outputs/apk/universal/release/`。需要 JDK 17+、Android SDK（platform 36 / build-tools 36）与 NDK 27，并设置 `ANDROID_HOME`、`NDK_HOME`、`JAVA_HOME`；release 签名读取 `src-tauri/gen/android/keystore.properties`（该文件与密钥库不入库，需自行保管）。
+
+> Windows 上构建时还需要「开发人员模式」或管理员权限：Tauri CLI 会把编译好的动态库以符号链接方式放入 `jniLibs`。
 
 ## 画布存放位置
 
@@ -58,6 +74,8 @@ npm run tauri:build
 - 更换目录时可勾选「把现有白板复制到新目录」，同名白板会被跳过，不会覆盖新目录里已有的数据
 - 换机迁移：把整个目录复制到新机器，再在软件里选择同一目录即可，无需导出导入
 - 存放位置记录在 `%APPDATA%\com.whiteboard.desktop\storage.json`；目录被删除或不可写时会自动回退到默认位置，保证应用总能启动
+
+移动端（Android）不提供该选项：系统没有桌面式目录选择器，画布固定存放在应用私有目录，卸载应用会一并删除，请注意导出备份。
 
 ## 目录结构
 

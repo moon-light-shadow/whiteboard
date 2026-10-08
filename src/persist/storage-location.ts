@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
-import { isTauriEnv } from './env'
+import { isMobileEnv, isTauriEnv } from './env'
 
 /** 存储位置快照（与 Rust 侧 `StorageInfo` 对齐） */
 export interface StorageInfo {
@@ -26,14 +26,14 @@ export interface SetStorageDirResult {
   migration: MigrationReport | null
 }
 
-/** 存储位置设置仅在桌面端可用（浏览器预览走 IndexedDB，无目录概念） */
+/** 存储位置设置仅在桌面端可用（浏览器预览走 IndexedDB，移动端固定在应用私有目录） */
 export function supportsStorageLocation(): boolean {
-  return isTauriEnv()
+  return isTauriEnv() && !isMobileEnv()
 }
 
 /** 读取当前存储位置；非桌面环境返回 null */
 export async function loadStorageInfo(): Promise<StorageInfo | null> {
-  if (!isTauriEnv()) return null
+  if (!supportsStorageLocation()) return null
   return invoke<StorageInfo>('storage_info')
 }
 
