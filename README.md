@@ -65,6 +65,35 @@ npm run tauri android build -- --apk  # 生成通用 APK
 
 > Windows 上构建时还需要「开发人员模式」或管理员权限：Tauri CLI 会把编译好的动态库以符号链接方式放入 `jniLibs`。
 
+<details>
+<summary>没有符号链接权限时的手动构建（Windows）</summary>
+
+```powershell
+$env:ANDROID_HOME = 'D:\Android\Sdk'; $env:NDK_HOME = "$env:ANDROID_HOME\ndk\27.0.12077973"
+$env:JAVA_HOME = 'C:\Program Files\Java\jdk-21'
+$env:TAURI_ANDROID_PROJECT_PATH = "$PWD\src-tauri\gen\android"
+$env:WRY_ANDROID_KOTLIN_FILES_OUT_DIR = "$env:TAURI_ANDROID_PROJECT_PATH\app\src\main\java\com\whiteboard\desktop\generated"
+$env:WRY_ANDROID_PACKAGE = 'com.whiteboard.desktop'; $env:WRY_ANDROID_LIBRARY = 'whiteboard_lib'
+$bin = "$env:NDK_HOME\toolchains\llvm\prebuilt\windows-x86_64\bin"
+
+npm run build   # 先生成 dist，release 库会内嵌前端资源
+cd src-tauri
+# 逐个 ABI 交叉编译（release 必须带 custom-protocol，否则不会内嵌前端）
+$env:CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER = "$bin\aarch64-linux-android24-clang.cmd"
+$env:CC_aarch64-linux-android = $env:CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER
+$env:AR_aarch64-linux-android = "$bin\llvm-ar.exe"
+cargo build --release --features tauri/custom-protocol --target aarch64-linux-android
+Copy-Item target\aarch64-linux-android\release\libwhiteboard_lib.so `
+  gen\android\app\src\main\jniLibs\arm64-v8a\libwhiteboard_lib.so -Force
+cd gen\android
+.\gradlew.bat :app:assembleUniversalRelease -x rustBuildUniversalRelease `
+  -x rustBuildArm64Release -x rustBuildArmRelease -x rustBuildX86Release -x rustBuildX86_64Release
+```
+
+`custom-protocol` 特性与 `#[cfg_attr(mobile, tauri::mobile_entry_point)]` 两者缺一不可：前者决定是否内嵌前端资源，后者生成 Kotlin 侧调用的 JNI 方法，缺失都会导致应用无法正常启动。
+
+</details>
+
 ## 画布存放位置
 
 画布数据默认保存在应用数据目录（Windows：`%APPDATA%\com.whiteboard.desktop\boards`），每块白板一个文件夹，内含 `board.json`、`board.json.bak`、`meta.json` 与 `assets/` 图片资源。

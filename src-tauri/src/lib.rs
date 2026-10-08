@@ -4,7 +4,11 @@ mod storage;
 
 use tauri::Manager;
 
-/// 桌面端运行入口：注册存储状态、系统对话框插件与全部 IPC 命令
+/// 应用运行入口：注册存储状态、系统对话框插件与全部 IPC 命令
+///
+/// `mobile_entry_point` 是移动端必需的：它在 Android 上生成 Kotlin 侧 `Rust.kt`
+/// 所声明的 JNI 方法（`create` / `start` / `ipc` 等）。缺失会导致启动即 UnsatisfiedLinkError。
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
