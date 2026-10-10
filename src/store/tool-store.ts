@@ -50,6 +50,10 @@ export interface ToolState extends ToolStyle {
 export const INK_SIZE_STEPS = [1, 2, 3, 4, 6, 8, 12, 16, 24] as const
 export const HIGHLIGHTER_SIZE_STEPS = [8, 12, 16, 24, 32, 40, 48, 64] as const
 
+/** 粗细连续可调范围（样式栏滑块），可自由设定任意粗细而非只能选档位 */
+export const INK_SIZE_RANGE = { min: 1, max: 64 } as const
+export const HIGHLIGHTER_SIZE_RANGE = { min: 4, max: 96 } as const
+
 export const DEFAULT_STYLE: ToolStyle = {
   penColor: '#111827',
   penSize: 3,

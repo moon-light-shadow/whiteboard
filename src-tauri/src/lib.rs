@@ -33,6 +33,11 @@ pub fn run() {
             commands::read_file_base64,
             commands::read_file_text,
             commands::write_file_base64,
+            commands::write_export_file,
+            commands::pick_scene_file,
+            commands::pick_image_files,
+            commands::pick_folder,
+            commands::pick_save_path,
         ])
         .run(tauri::generate_context!())
         .expect("启动 Whiteboard 失败");

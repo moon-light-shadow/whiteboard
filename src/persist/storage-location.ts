@@ -1,5 +1,4 @@
 import { invoke } from '@tauri-apps/api/core'
-import { open } from '@tauri-apps/plugin-dialog'
 import { isMobileEnv, isTauriEnv } from './env'
 
 /** 存储位置快照（与 Rust 侧 `StorageInfo` 对齐） */
@@ -38,14 +37,8 @@ export async function loadStorageInfo(): Promise<StorageInfo | null> {
 }
 
 /** 弹出系统目录选择器；返回 null 表示用户取消 */
-export async function pickStorageDir(currentDir?: string): Promise<string | null> {
-  const picked = await open({
-    directory: true,
-    multiple: false,
-    title: '选择画布存放目录',
-    defaultPath: currentDir,
-  })
-  return typeof picked === 'string' ? picked : null
+export async function pickStorageDir(): Promise<string | null> {
+  return invoke<string | null>('pick_folder')
 }
 
 /** 切换画布目录；migrate 为真时把现有白板复制到新目录 */

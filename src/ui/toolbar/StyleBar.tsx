@@ -3,13 +3,15 @@ import { ArrowDownToLine, ArrowUpToLine, Bold, BringToFront, Copy, Layers, SendT
 import { INK_COLORS } from '../../kernel/factories'
 import type { LineKind, ShapeKind } from '../../kernel/types'
 import { useBoardStore } from '../../store/board-store'
-import { useToolStore, type ToolStyle } from '../../store/tool-store'
+import { HIGHLIGHTER_SIZE_RANGE, INK_SIZE_RANGE, useToolStore, type ToolStyle } from '../../store/tool-store'
 import { cn } from '../primitives/cn'
 import { Button, IconButton } from '../primitives/Button'
 import { ColorGrid } from '../primitives/ColorSwatch'
+import { ColorPopover } from '../primitives/ColorPopover'
 import { Segmented } from '../primitives/Segmented'
 import { Slider } from '../primitives/Slider'
 import { Tooltip } from '../primitives/Tooltip'
+import { useCompactLayout } from '../primitives/use-media-query'
 import { useEngine } from '../canvas/engine-context'
 import {
   applyStyleToSelection,
@@ -21,8 +23,6 @@ import {
 
 const HIGHLIGHT_COLORS = ['#FEF08A', '#FDBA74', '#FCA5A5', '#A7F3D0', '#BFDBFE', '#DDD6FE', '#F9A8D4', '#99F6E4']
 const NOTE_PALETTE = ['#FFE7A0', '#B7E4C7', '#BFDBFE', '#FBCFE8', '#DDD6FE', '#FED7AA', '#E2E8F0', '#FCA5A5']
-const PEN_SIZES = [1, 2, 3, 4, 6, 8, 12, 16, 24]
-const HIGHLIGHT_SIZES = [8, 12, 16, 24, 32, 40, 48, 64]
 
 const SHAPE_OPTIONS: Array<{ value: ShapeKind; label: string }> = [
   { value: 'rect', label: '矩形' },
@@ -39,42 +39,6 @@ const LINE_OPTIONS: Array<{ value: LineKind; label: string }> = [
 
 function Divider() {
   return <div className="h-6 w-px bg-surface-border" />
-}
-
-function SizeDots({
-  sizes,
-  value,
-  onPick,
-  scale = 0.6,
-}: {
-  sizes: number[]
-  value: number
-  onPick: (size: number) => void
-  /** 每个档位对应的圆点像素增量；高亮笔档位跨度大，需要更小的增量 */
-  scale?: number
-}) {
-  return (
-    <div className="flex items-center gap-1">
-      {sizes.map((size) => {
-        const dot = Math.min(19, 3 + size * scale)
-        return (
-          <button
-            key={size}
-            type="button"
-            aria-label={`粗细 ${size}`}
-            title={`粗细 ${size}`}
-            onClick={() => onPick(size)}
-            className={cn(
-              'flex h-7 w-7 items-center justify-center rounded-[10px] transition-colors duration-150',
-              size === value ? 'bg-brand-500/12 ring-1 ring-brand-500/40' : 'hover:bg-surface-hover',
-            )}
-          >
-            <span className="rounded-full bg-content-primary" style={{ width: dot, height: dot }} />
-          </button>
-        )
-      })}
-    </div>
-  )
 }
 
 function Toggle({ active, label, onClick, icon }: { active: boolean; label: string; onClick: () => void; icon?: ReactNode }) {
@@ -97,6 +61,7 @@ function Toggle({ active, label, onClick, icon }: { active: boolean; label: stri
 /** 底部上下文样式栏：随工具切换内容，选中对象时同步修改对象样式 */
 export function StyleBar() {
   const engine = useEngine()
+  const compact = useCompactLayout()
   const tool = useToolStore((state) => state.tool)
   const style = useToolStore()
   const selection = useBoardStore((state) => state.selection)
@@ -114,34 +79,42 @@ export function StyleBar() {
       case 'pen':
         return (
           <>
-            <ColorGrid
-              colors={INK_COLORS}
-              value={style.penColor}
-              onChange={(color) => patch({ penColor: color })}
-              columns={9}
-              allowCustom
-            />
+            <ColorPopover colors={INK_COLORS} value={style.penColor} onChange={(color) => patch({ penColor: color })} label="笔色" />
             <Divider />
-            <SizeDots sizes={PEN_SIZES} value={style.penSize} onPick={(size) => patch({ penSize: size })} />
+            <div className="flex w-52 items-center gap-2.5">
+              <span className="shrink-0 text-[11.5px] font-medium text-content-secondary">粗细</span>
+              <Slider
+                ariaLabel="笔粗细"
+                min={INK_SIZE_RANGE.min}
+                max={INK_SIZE_RANGE.max}
+                value={style.penSize}
+                onChange={(value) => patch({ penSize: value })}
+                format={(value) => `${value}`}
+              />
+            </div>
           </>
         )
       case 'highlighter':
         return (
           <>
-            <ColorGrid
+            <ColorPopover
               colors={HIGHLIGHT_COLORS}
               value={style.highlighterColor}
               onChange={(color) => patch({ highlighterColor: color })}
-              columns={9}
-              allowCustom
+              label="色"
             />
             <Divider />
-            <SizeDots
-              sizes={HIGHLIGHT_SIZES}
-              value={style.highlighterSize}
-              onPick={(size) => patch({ highlighterSize: size })}
-              scale={0.26}
-            />
+            <div className="flex w-52 items-center gap-2.5">
+              <span className="shrink-0 text-[11.5px] font-medium text-content-secondary">粗细</span>
+              <Slider
+                ariaLabel="荧光笔粗细"
+                min={HIGHLIGHTER_SIZE_RANGE.min}
+                max={HIGHLIGHTER_SIZE_RANGE.max}
+                value={style.highlighterSize}
+                onChange={(value) => patch({ highlighterSize: value })}
+                format={(value) => `${value}`}
+              />
+            </div>
           </>
         )
       case 'eraser':
@@ -346,8 +319,22 @@ export function StyleBar() {
   }
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-4 z-30 flex justify-center px-4">
-      <div className="wb-glass pointer-events-auto flex max-w-[min(1180px,92vw)] flex-wrap items-center justify-center gap-3 rounded-3xl px-3.5 py-2.5 animate-slide-up">
+    <div
+      className={cn(
+        'pointer-events-none absolute inset-x-0 z-30 flex justify-center px-3',
+        // 手机端工具条在更下方，样式栏上移避让
+        compact ? 'bottom-[72px]' : 'bottom-4',
+      )}
+    >
+      <div
+        className={cn(
+          'wb-glass pointer-events-auto flex items-center gap-3 rounded-3xl px-3.5 py-2.5 animate-slide-up',
+          // 手机端单行横向滚动，避免多行换行把画布挤满
+          compact
+            ? 'w-full max-w-full flex-nowrap overflow-x-auto'
+            : 'max-w-[min(1180px,92vw)] flex-wrap justify-center',
+        )}
+      >
         {body()}
       </div>
     </div>

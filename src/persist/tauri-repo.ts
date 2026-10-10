@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
-import { open, save } from '@tauri-apps/plugin-dialog'
 import type { BoardMeta } from '../kernel/types'
+import { isMobileEnv } from './env'
 import { base64ToBytes, bytesToBase64 } from './base64'
 import {
   buildMeta,
@@ -11,8 +11,6 @@ import {
   type BoardRepository,
   type PickedImage,
 } from './repository'
-
-const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp']
 
 interface RawAsset {
   data: string
@@ -101,12 +99,8 @@ export class TauriBoardRepository implements BoardRepository {
   }
 
   async pickImages(): Promise<PickedImage[]> {
-    const picked = await open({
-      multiple: true,
-      title: '选择图片',
-      filters: [{ name: '图片', extensions: IMAGE_EXTENSIONS }],
-    })
-    const paths = Array.isArray(picked) ? picked : picked ? [picked] : []
+    const paths = await invoke<string[] | null>('pick_image_files')
+    if (!paths || paths.length === 0) return []
     const result: PickedImage[] = []
     for (const path of paths) {
       const data = await invoke<string>('read_file_base64', { path })
@@ -117,12 +111,7 @@ export class TauriBoardRepository implements BoardRepository {
   }
 
   async pickDocument(): Promise<BoardDocument | null> {
-    const picked = await open({
-      multiple: false,
-      title: '导入场景文件',
-      filters: [{ name: '白板场景', extensions: ['json'] }],
-    })
-    const path = Array.isArray(picked) ? picked[0] : picked
+    const path = await invoke<string | null>('pick_scene_file')
     if (!path) return null
     const text = await invoke<string>('read_file_text', { path })
     const parsed = JSON.parse(text) as Partial<BoardDocument>
@@ -138,16 +127,26 @@ export class TauriBoardRepository implements BoardRepository {
     }
   }
 
-  async saveFile(suggestedName: string, bytes: Uint8Array, _mime: string, description: string): Promise<boolean> {
+  async saveFile(
+    suggestedName: string,
+    bytes: Uint8Array,
+    _mime: string,
+    description: string,
+  ): Promise<string | null> {
+    const data = bytesToBase64(bytes)
+    // 移动端系统保存框返回 content:// URI，无法直接写：改为写入应用私有目录
+    if (isMobileEnv()) {
+      return invoke<string>('write_export_file', { name: suggestedName, data })
+    }
     const ext = suggestedName.split('.').pop() ?? 'bin'
-    const target = await save({
-      title: '导出',
-      defaultPath: suggestedName,
-      filters: [{ name: description, extensions: [ext] }],
+    const target = await invoke<string | null>('pick_save_path', {
+      suggestedName,
+      extension: ext,
+      description,
     })
-    if (!target) return false
-    await invoke('write_file_base64', { path: target, data: bytesToBase64(bytes) })
-    return true
+    if (!target) return null
+    await invoke('write_file_base64', { path: target, data })
+    return target
   }
 
   private async readThumbnail(boardId: string): Promise<string | null> {

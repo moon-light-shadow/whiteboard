@@ -182,13 +182,12 @@ export class BoardRenderer {
     const cameraChanged = !cameraEquals(camera, this.paintedCamera)
     if (cameraChanged) {
       this.bgDirty = true
-      if (!this.previewing) {
-        this.previewing = true
-        this.contentCanvas.style.transform = cssTransformBetween(this.paintedCamera, camera)
-      } else {
-        this.contentCanvas.style.transform = cssTransformBetween(this.paintedCamera, camera)
-      }
+      this.previewing = true
+      this.contentCanvas.style.transform = cssTransformBetween(this.paintedCamera, camera)
       this.scheduleSettle()
+    } else if (this.previewing) {
+      // 自愈：相机已回到位图对应的位置但预览变换仍在屏幕上，必须立刻重绘并复位
+      this.contentDirty = true
     }
 
     if (this.bgDirty) {
@@ -221,25 +220,35 @@ export class BoardRenderer {
 
   private paintContent(camera: Camera): void {
     const ctx = this.contentCtx
-    ctx.setTransform(1, 0, 0, 1, 0, 0)
-    ctx.clearRect(0, 0, this.contentCanvas.width, this.contentCanvas.height)
-    worldTransform(ctx, camera, this.dpr)
-    const view = viewportRect(camera, this.viewport)
-    const cull: Rect = {
-      x: view.x - CULL_MARGIN,
-      y: view.y - CULL_MARGIN,
-      w: view.w + CULL_MARGIN * 2,
-      h: view.h + CULL_MARGIN * 2,
+    try {
+      ctx.setTransform(1, 0, 0, 1, 0, 0)
+      ctx.clearRect(0, 0, this.contentCanvas.width, this.contentCanvas.height)
+      worldTransform(ctx, camera, this.dpr)
+      const view = viewportRect(camera, this.viewport)
+      const cull: Rect = {
+        x: view.x - CULL_MARGIN,
+        y: view.y - CULL_MARGIN,
+        w: view.w + CULL_MARGIN * 2,
+        h: view.h + CULL_MARGIN * 2,
+      }
+      const records = this.deps.scene.visible(cull)
+      const isDark = this.deps.isDark()
+      for (const record of records) {
+        if (this.hiddenId && record.id === this.hiddenId) continue
+        try {
+          paintRecord(ctx, record, camera, isDark)
+        } catch (error) {
+          // 单条记录画失败不能连累整层：否则内容层会被清空后停在空白状态，
+          // 只有下一次交互重绘才恢复，看起来就是「平移后内容消失、点一下才回来」
+          console.error('绘制记录失败', record.id, record.type, error)
+        }
+      }
+    } finally {
+      // 无论绘制是否出错，都要让位图与相机重新对齐并复位预览变换
+      this.paintedCamera = { ...camera }
+      this.previewing = false
+      this.contentCanvas.style.transform = 'none'
     }
-    const records = this.deps.scene.visible(cull)
-    const isDark = this.deps.isDark()
-    for (const record of records) {
-      if (this.hiddenId && record.id === this.hiddenId) continue
-      paintRecord(ctx, record, camera, isDark)
-    }
-    this.paintedCamera = { ...camera }
-    this.previewing = false
-    this.contentCanvas.style.transform = 'none'
   }
 
   private paintOverlay(camera: Camera): void {

@@ -48,8 +48,8 @@ export interface BoardRepository {
   readAsset(boardId: string, assetId: string): Promise<AssetPayload | null>
   pickImages(): Promise<PickedImage[]>
   pickDocument(): Promise<BoardDocument | null>
-  /** 弹出系统保存对话框写文件；返回 false 表示用户取消 */
-  saveFile(suggestedName: string, bytes: Uint8Array, mime: string, description: string): Promise<boolean>
+  /** 写出文件；返回落盘位置（移动端为应用目录下的 exports/），用户取消返回 null */
+  saveFile(suggestedName: string, bytes: Uint8Array, mime: string, description: string): Promise<string | null>
 }
 
 export const MIME_EXT: Record<string, string> = {

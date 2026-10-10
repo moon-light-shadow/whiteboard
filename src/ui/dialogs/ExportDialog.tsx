@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Check, ClipboardCopy, Download, Loader2 } from 'lucide-react'
-import { getRepository } from '../../persist'
+import { getRepository, isMobileEnv } from '../../persist'
 import { useBoardStore } from '../../store/board-store'
 import { useUiStore } from '../../store/ui-store'
 import { buildExport, buildPreview, sanitizeFileName, timestampSuffix, type ExportFormat, type ExportScope } from '../../export'
@@ -68,7 +68,8 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
       .then((saved) => {
         if (!saved) return
         setDone(true)
-        showToast('导出成功', 'success')
+        // 移动端没有「另存为」，文件落在应用私有目录，需要明确告知位置
+        showToast(isMobileEnv() ? `已导出到 ${saved}` : '导出成功', 'success')
         window.setTimeout(onClose, 600)
       })
       .catch((error) => {

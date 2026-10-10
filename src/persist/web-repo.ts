@@ -167,14 +167,14 @@ export class WebBoardRepository implements BoardRepository {
     }
   }
 
-  async saveFile(suggestedName: string, bytes: Uint8Array, mime: string): Promise<boolean> {
+  async saveFile(suggestedName: string, bytes: Uint8Array, mime: string): Promise<string | null> {
     const url = URL.createObjectURL(new Blob([bytes.slice().buffer as ArrayBuffer], { type: mime }))
     const anchor = document.createElement('a')
     anchor.href = url
     anchor.download = suggestedName
     anchor.click()
     setTimeout(() => URL.revokeObjectURL(url), 4000)
-    return true
+    return suggestedName
   }
 
   private async readAllThumbs(): Promise<Map<string, string>> {

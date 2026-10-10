@@ -1,13 +1,15 @@
 import { Maximize, Minus, Plus } from 'lucide-react'
 import { Tooltip } from '../primitives/Tooltip'
+import { useCompactLayout } from '../primitives/use-media-query'
 import { useBoardStore } from '../../store/board-store'
 import { useEngine } from '../canvas/engine-context'
 
 const STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4]
 
-/** 右下角缩放控件：百分比气泡 + 缩放/适配 */
+/** 右下角缩放控件：百分比气泡 + 缩放/适配（手机端隐藏，改用双指缩放与「更多」菜单） */
 export function ZoomBar() {
   const engine = useEngine()
+  const compact = useCompactLayout()
   const cameraVersion = useBoardStore((state) => state.cameraVersion)
   const zoom = engine.cameraState.z
 
@@ -20,6 +22,8 @@ export function ZoomBar() {
       engine.zoomToPercent(Math.round((next ?? zoom / 1.5) * 100))
     }
   }
+
+  if (compact) return null
 
   return (
     <div className="wb-glass absolute bottom-5 right-5 z-30 flex items-center gap-0.5 rounded-2xl p-1">

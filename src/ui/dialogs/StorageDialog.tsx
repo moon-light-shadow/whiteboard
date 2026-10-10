@@ -65,7 +65,7 @@ export function StorageDialog({ open, onClose, firstRun = false, onChanged }: St
 
   const choose = async () => {
     try {
-      const dir = await pickStorageDir(info?.dataDir)
+      const dir = await pickStorageDir()
       if (!dir) return
       if (info && dir === info.dataDir) {
         showToast('新旧目录相同，无需切换')
