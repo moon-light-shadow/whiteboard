@@ -3,11 +3,13 @@ import { HIGHLIGHTER_SIZE_STEPS, INK_SIZE_STEPS, useToolStore, type ToolId } fro
 import { useUiStore } from '../store/ui-store'
 import { isTypingTarget } from '../tools/tool'
 import { useBoardStore } from '../store/board-store'
+import { imagesFromDataTransfer, pickedFromFiles } from '../persist/assets'
 import {
   copySelection,
   cutSelection,
   deleteSelection,
   duplicateSelection,
+  hasClipboard,
   nudgeSelection,
   pasteClipboard,
   redo,
@@ -89,8 +91,11 @@ export function useShortcuts(engine: BoardEngine | null): void {
             cutSelection(engine)
             return
           case 'v':
-            event.preventDefault()
-            pasteClipboard(engine)
+            // 内部剪贴板有内容时才拦截；否则放行给浏览器触发 paste 事件（系统剪贴板图片）
+            if (hasClipboard()) {
+              event.preventDefault()
+              pasteClipboard(engine)
+            }
             return
           case 'd':
             event.preventDefault()
@@ -198,12 +203,30 @@ export function useShortcuts(engine: BoardEngine | null): void {
     }
     const onBlur = () => engine.setSpaceHeld(false)
 
+    /** 系统剪贴板里的图片直接贴到画布中心（Ctrl+V / 菜单粘贴，桌面端） */
+    const onPaste = (event: ClipboardEvent) => {
+      if (isTypingTarget(event.target)) return
+      if (useUiStore.getState().dialog) return
+      const files = imagesFromDataTransfer(event.clipboardData)
+      if (files.length === 0) return
+      event.preventDefault()
+      const world = engine.toWorld({ x: engine.viewport.w / 2, y: engine.viewport.h / 2 })
+      void pickedFromFiles(files)
+        .then((picked) => engine.insertImages(picked, world))
+        .catch((error) => {
+          console.error('粘贴图片失败', error)
+          engine.showToast('粘贴图片失败', 'error')
+        })
+    }
+
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('keyup', onKeyUp)
+    window.addEventListener('paste', onPaste)
     window.addEventListener('blur', onBlur)
     return () => {
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)
+      window.removeEventListener('paste', onPaste)
       window.removeEventListener('blur', onBlur)
     }
   }, [engine])

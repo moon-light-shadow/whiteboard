@@ -77,7 +77,7 @@ export function LeftRail() {
   })
 
   const imageButton = (
-    <Tooltip label="插入图片" shortcut="I" side={compact ? 'top' : 'right'}>
+    <Tooltip label="插入图片（也可 Ctrl+V 粘贴）" shortcut="I" side={compact ? 'top' : 'right'}>
       <button
         type="button"
         aria-label="插入图片"

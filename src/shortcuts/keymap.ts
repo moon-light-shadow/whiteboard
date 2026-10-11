@@ -48,6 +48,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { keys: 'Ctrl+C', label: '复制' },
       { keys: 'Ctrl+X', label: '剪切' },
       { keys: 'Ctrl+V', label: '粘贴' },
+      { keys: 'Ctrl+V', label: '粘贴图片（剪贴板截图）' },
       { keys: 'Ctrl+D', label: '再制' },
       { keys: 'Ctrl+A', label: '全选' },
       { keys: 'Delete', label: '删除所选' },
