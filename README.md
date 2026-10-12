@@ -112,6 +112,42 @@ cd gen\android
 
 手机端界面按窄屏做了适配：工具条移到底部横排、样式栏单行横向滚动、顶部栏把低频操作收进「更多」。导出同样可用——移动端没有「另存为」对话框，文件会写到应用私有目录的 `exports/` 子目录，导出成功后提示里会显示完整路径。
 
+## 应用图标
+
+图标是矢量源 + 一条命令生成的整套尺寸，改图不用手动改各平台的文件。
+
+```bash
+npx tauri icon src-tauri/app-icon.json   # 重新生成全部平台图标
+```
+
+| 源文件 | 作用 |
+|---|---|
+| `src-tauri/app-icon.svg` | 主图标：桌面端 `icon.ico` / `icon.icns` / 各尺寸 PNG，以及 Android 传统方形图标 |
+| `src-tauri/app-icon-fg.svg` | Android 自适应图标**前景层**（只有字形，透明底） |
+| `src-tauri/app-icon-bg.svg` | Android 自适应图标**背景层**（满幅不透明，形状由系统裁切） |
+| `src-tauri/app-icon-mono.svg` | Android 13+ 主题图标**单色层** |
+| `src-tauri/app-icon.json` | 生成清单，把上面几张图组装成各平台尺寸 |
+
+生成结果的位置：
+
+- 桌面端 → `src-tauri/icons/`（`icon.ico`、`icon.icns`、`32x32.png`、`128x128.png`、`128x128@2x.png`、`icon.png` 及 Appx 系列），`tauri.conf.json` 的 `bundle.icon` 引用其中 5 个；需要新增尺寸时改 `bundle.icon`
+- Android → `src-tauri/gen/android/app/src/main/res/mipmap-*/`（`ic_launcher`、`ic_launcher_round`、`ic_launcher_foreground`、`ic_launcher_background`、`ic_launcher_monochrome`）+ `mipmap-anydpi-v26/ic_launcher.xml`
+
+画图要点：
+
+- 主图标建议 1024×1024 纯 SVG，无圆角（桌面端由 `icon.ico` 自带遮罩；Android 传统图标需要圆角时在 SVG 里画）
+- **自适应前景层的字形必须缩到画布中央 61% 以内**（Android 安全区是 108dp 画布中央 66dp 圆形），否则圆形/圆角遮罩会把字形切掉；`android_fg_scale` 对 SVG 源不生效，直接在前景 SVG 里用 `transform` 缩放最可靠
+- 品牌主色 `#4f46e5`（靛蓝），笔画渐变 `#fb7185 → #a78bfa → #22d3ee`
+
+改完**必须重新构建**才会生效（图标在打包时嵌入 exe/apk）：
+
+```bash
+npm run tauri:build                                    # 桌面端
+# Android：重编四个 ABI 后 gradlew :app:assembleUniversalRelease
+```
+
+> 手机端图标有系统缓存：覆盖安装后桌面可能仍显示旧图标，卸载重装或清理图标缓存才会更新。
+
 ## 目录结构
 
 ```
